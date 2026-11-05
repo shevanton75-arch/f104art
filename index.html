@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Formato 104 · ART</title>
+<style>
+:root{--n:#000;--g1:#2b2b2b;--g2:#666;--g3:#9a9a9a;--g4:#d9d9d9;--g5:#f1f1f1;--b:#fff}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 "Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--n);background:var(--g5)}
+header{background:var(--b);border-bottom:1px solid var(--n);padding:12px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header img{height:44px;max-width:160px;object-fit:contain}
+header h1{font-size:17px;margin:0;font-weight:700;letter-spacing:-.01em}
+header small{display:block;color:var(--g2);font-weight:400;font-size:12px;letter-spacing:0}
+nav{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+main{max-width:1320px;margin:0 auto;padding:24px}
+button{font:inherit;border:1px solid var(--n);background:var(--n);color:var(--b);padding:7px 14px;cursor:pointer;border-radius:2px}
+button:hover{background:var(--g1)}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--n);outline-offset:2px}
+button.s{background:var(--b);color:var(--n)}button.s:hover{background:var(--g5)}
+button.x{border-color:var(--g4);color:var(--g2);background:var(--b)}
+input,select,textarea{font:inherit;width:100%;padding:7px 9px;border:1px solid var(--g3);border-radius:2px;background:var(--b);color:var(--n)}
+input:disabled,select:disabled,textarea:disabled{background:var(--g5);color:var(--g2);border-color:var(--g4)}
+label{display:block;font-size:12px;color:var(--g2);margin-bottom:3px}
+.card{background:var(--b);border:1px solid var(--g4);padding:22px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:12px}
+.full{grid-column:1/-1}
+table{border-collapse:collapse;width:100%;background:var(--b)}
+th,td{border:1px solid var(--g4);padding:6px 8px;text-align:left;vertical-align:top;font-size:13px}
+th{background:var(--n);color:var(--b);font-weight:500;white-space:nowrap}
+tr:nth-child(even) td{background:#fafafa}
+.sc{overflow:auto}
+.bar{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:14px}.bar>div{min-width:170px}
+.tag{display:inline-block;border:1px solid var(--g2);padding:0 6px;font-size:12px}
+h2{font-size:15px;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--g4)}h2:first-child{margin-top:0}
+#m{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;overflow:auto;padding:24px}
+#m>.card{max-width:980px;margin:0 auto}
+.PGN .fcp{display:none}
+.mx th,.mx td{white-space:nowrap;font-size:12px}
+.mx td.w{white-space:normal;min-width:260px}
+.mx td.c{text-align:center}.mx td.r{text-align:right}
+.mx th.g{text-align:center;border-left:1px solid #666}
+.mx th.g2{background:#3a3a3a;font-weight:400;text-align:center}
+.mx tfoot td{font-weight:700;background:var(--g5)}
+.login{max-width:380px;margin:12vh auto}
+.row{display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:8px;margin-bottom:6px}
+@media(max-width:640px){.row{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="m"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script>
+/* ===== CONFIGURACIÓN =====
+   Pegue aquí la configuración web de su proyecto Firebase (Authentication correo/contraseña + Firestore).
+   Si queda vacía, la app funciona en modo demostración con almacenamiento local del navegador (sin contraseña). */
+const CFG = { apiKey:"AIzaSyC2Jvk9ET1bKaoqCzORTKAfTzGMwnomJ-o", authDomain:"f104art.firebaseapp.com", projectId:"f104art", storageBucket:"f104art.firebasestorage.app", messagingSenderId:"236642230006", appId:"1:236642230006:web:7fbcf16f6f5e7d315856d7" };
+
+const LIVE = !!CFG.apiKey;
+let fdb, fauth;
+if (LIVE) { firebase.initializeApp(CFG); fdb = firebase.firestore(); fauth = firebase.auth(); }
+
+/* ===== Capa de datos ===== */
+const LS = { g: k => JSON.parse(localStorage.getItem(k) || '[]'), s: (k, v) => localStorage.setItem(k, JSON.stringify(v)) };
+const DB = {
+  async all(c) { if (LIVE) return (await fdb.collection(c).get()).docs.map(d => ({ ...d.data(), id: d.id })); return LS.g(c); },
+  async put(c, o) {
+    if (!o.id) o.id = LIVE ? fdb.collection(c).doc().id : 'i' + Date.now();
+    if (LIVE) { const r = { ...o }; delete r.id; await fdb.collection(c).doc(o.id).set(r); }
+    else { const a = LS.g(c), i = a.findIndex(x => x.id == o.id); i < 0 ? a.push(o) : a[i] = o; LS.s(c, a); }
+    return o;
+  },
+  async del(c, id) { if (LIVE) await fdb.collection(c).doc(id).delete(); else LS.s(c, LS.g(c).filter(x => x.id != id)); }
+};
+
+/* ===== Utilidades ===== */
+const $ = s => document.querySelector(s);
+const E = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const S = { u: null, cv: [], us: [], lg: {}, v: 'lista', f: '', ym: new Date().toISOString().slice(0, 7), c: null, nuevo: false };
+const admin = () => S.u.rol == 'administrador';
+const byId = id => S.cv.find(c => c.id == id);
+const ult = (c, ym) => { const k = Object.keys(c.per || {}).filter(k => k <= ym).sort().pop(); return k ? { k, ...c.per[k] } : {}; };
+const pc = v => v === '' || v == null ? '' : Number(v).toFixed(1) + '%';
+const cop = v => '$' + Number(v || 0).toLocaleString('es-CO');
+const sum = (a, k) => (a || []).reduce((s, x) => s + (+x[k] || 0), 0);
+const fl = () => S.cv.filter(c => !S.f || c.fuente == S.f);
+const dim = s => new Promise(r => { const i = new Image(); i.onload = () => r({ w: i.width, h: i.height }); i.src = s; });
+
+/* ===== Sesión ===== */
+function pLogin() {
+  $('#app').innerHTML = `<div class="card login"><h2>Formato 104 · Ingreso</h2>
+  <label>Correo</label><input id="e" type="email" autocomplete="username">
+  <label style="margin-top:10px">Contraseña</label><input id="p" type="password" autocomplete="current-password">
+  <div class="bar" style="margin:16px 0 0"><button onclick="entrar(0)">Ingresar</button><button class="s" onclick="entrar(1)">Crear cuenta</button></div>
+  <p id="er" style="color:var(--g2)">${LIVE ? '' : 'Modo demostración: los datos se guardan solo en este navegador.'}</p></div>`;
+}
+async function entrar(reg) {
+  const e = $('#e').value.trim(), p = $('#p').value;
+  if (!e) return $('#er').textContent = 'Escriba su correo.';
+  try {
+    let u, us;
+    if (LIVE) {
+      const cr = reg ? await fauth.createUserWithEmailAndPassword(e, p) : await fauth.signInWithEmailAndPassword(e, p);
+      us = await DB.all('usuarios'); u = us.find(x => x.id == cr.user.uid);
+      if (!u) u = await DB.put('usuarios', { id: cr.user.uid, email: e, rol: 'funcionario' });
+    } else {
+      us = await DB.all('usuarios'); u = us.find(x => x.email == e);
+      if (!u) u = await DB.put('usuarios', { email: e, rol: us.length ? 'funcionario' : 'administrador' });
+    }
+    S.u = u; await cargar(); render();
+  } catch (x) { $('#er').textContent = x.message; }
+}
+async function salir() { if (LIVE) await fauth.signOut(); S.u = null; S.v = 'lista'; pLogin(); }
+async function cargar() {
+  S.us = admin() ? await DB.all('usuarios') : [];
+  const t = await DB.all('convenios');
+  S.cv = admin() ? t : t.filter(c => c.uid == S.u.id || (c.supCorreo || '').toLowerCase() == S.u.email.toLowerCase());
+  S.lg = (await DB.all('config')).find(x => x.id == 'logos') || {};
+}
+
+/* ===== Vistas ===== */
+function render() {
+  const lg = [S.lg.a, S.lg.b].filter(Boolean).map(s => `<img src="${s}" alt="Logo">`).join('');
+  const bt = (v, t) => `<button class="${S.v == v ? '' : 's'}" onclick="S.v='${v}';render()">${t}</button>`;
+  $('#app').innerHTML = `<header>${lg}<h1>Formato 104<small>Agencia de Renovación del Territorio</small></h1>
+  <nav>${bt('lista', 'Convenios')}${bt('matriz', 'Matriz')}${admin() ? bt('us', 'Usuarios y logos') : ''}
+  <span style="color:var(--g2)">${E(S.u.email)} (${S.u.rol})</span><button class="x" onclick="salir()">Salir</button></nav></header>
+  <main>${S.v == 'matriz' ? vMatriz() : S.v == 'us' && admin() ? vUs() : vLista()}</main>`;
+}
+const selF = () => `<div><label>Fuente de financiación</label><select onchange="S.f=this.value;render()"><option value="">Todas</option><option value="FCP" ${S.f == 'FCP' ? 'selected' : ''}>Fondo Colombia en Paz</option><option value="PGN" ${S.f == 'PGN' ? 'selected' : ''}>Presupuesto General de la Nación</option></select></div>`;
+
+function vLista() {
+  return `<div class="bar">${selF()}<button onclick="abrir()">Nuevo convenio</button><button class="s" onclick="xlsx(fl(),'9999',S.f,1)">Exportar matriz a Excel</button><button class="s" onclick="pdf(fl(),'9999',S.f,1)">Exportar matriz a PDF</button></div>
+  <div class="sc"><table><tr><th>Fuente</th><th>No. contrato</th><th>Contratista</th><th>Supervisor</th><th>Último periodo</th><th>Técnico</th><th>Financiero</th><th></th></tr>
+  ${fl().map(c => { const p = ult(c, '9999'); return `<tr><td><span class="tag">${c.fuente}</span></td><td>${E(c.numero)}</td><td>${E(c.contratista)}</td><td>${E(c.sup)}</td><td>${p.k || '—'}</td><td>${pc(p.tecR)}</td><td>${pc(p.finR)}</td>
+  <td style="white-space:nowrap"><button class="s" onclick="abrir('${c.id}')">Editar</button> <button class="s" onclick="xlsx([byId('${c.id}')],'9999')">Excel</button> <button class="s" onclick="pdf([byId('${c.id}')],'9999')">PDF</button></td></tr>`; }).join('') || '<tr><td colspan="8">Aún no hay convenios. Cree el primero con “Nuevo convenio”.</td></tr>'}</table></div>`;
+}
+function vMatriz() {
+  const { l, ms, rows } = armar(fl(), S.ym), nf = FIJ.length;
+  const cl = i => [0, 1, 3].includes(i) ? 'c' : (i == 5 || i == 11) ? 'w' : '';
+  const tAd = rows.reduce((t, r) => t + r.ad, 0), tPr = rows.reduce((t, r) => t + r.pr, 0);
+  return `<div class="bar">${selF()}<div><label>Corte (mes)</label><input type="month" value="${S.ym}" onchange="S.ym=this.value||S.ym;render()"></div>
+  <button onclick="xlsx(fl(),S.ym,S.f)">Exportar Excel</button><button class="s" onclick="pdf(fl(),S.ym,S.f)">Exportar PDF</button></div>
+  <p style="color:var(--g2);margin:0 0 10px">${l.length} convenio(s) · Periodos diligenciados: ${rangoMeses(ms)}</p>
+  <div class="sc"><table class="mx"><thead><tr>${FIJ.map(f => `<th rowspan="2">${f[0]}</th>`).join('')}${ms.map(k => `<th class="g" colspan="4">${lblMes(k)}</th>`).join('')}<th rowspan="2">Adiciones (COP)</th><th rowspan="2">Prórrogas (días)</th><th rowspan="2">Observaciones (último periodo)</th></tr>
+  <tr>${ms.map(() => MCOL.map(m => `<th class="g2">${m[0]}</th>`).join('')).join('')}</tr></thead>
+  <tbody>${rows.map(r => `<tr>${r.fij.map((v, i) => `<td class="${cl(i)}">${E(v)}</td>`).join('')}${r.mes.map(q => MCOL.map(m => `<td class="c">${pc(q[m[1]])}</td>`).join('')).join('')}<td class="r">${r.ad ? cop(r.ad) : ''}</td><td class="c">${r.pr || ''}</td><td class="w">${E(r.obs)}</td></tr>`).join('') || `<tr><td colspan="${nf + 3}">Sin convenios.</td></tr>`}</tbody>
+  ${rows.length ? `<tfoot><tr><td colspan="${nf + ms.length * 4}" style="text-align:right">TOTAL</td><td class="r">${cop(tAd)}</td><td class="c">${tPr}</td><td></td></tr></tfoot>` : ''}</table></div>`;
+}
+function vUs() {
+  return `<div class="card"><h2>Usuarios</h2><div class="sc"><table><tr><th>Correo</th><th>Rol</th></tr>${S.us.map(u => `<tr><td>${E(u.email)}</td><td><select onchange="rol('${u.id}',this.value)"><option ${u.rol == 'funcionario' ? 'selected' : ''}>funcionario</option><option ${u.rol == 'administrador' ? 'selected' : ''}>administrador</option></select></td></tr>`).join('')}</table></div></div>
+  <div class="card"><h2>Logos de la entidad</h2><p style="color:var(--g2)">PNG o JPG, máximo 600 KB. Aparecen en el encabezado y en los PDF.</p>
+  <div class="bar"><div><label>Logo 1 (izquierda)</label><input type="file" accept="image/png,image/jpeg" onchange="logo('a',this)"></div><div><label>Logo 2 (derecha)</label><input type="file" accept="image/png,image/jpeg" onchange="logo('b',this)"></div></div></div>`;
+}
+async function rol(id, r) { const u = S.us.find(x => x.id == id); u.rol = r; await DB.put('usuarios', u); }
+function logo(k, i) {
+  const f = i.files[0]; if (!f) return;
+  if (f.size > 6e5) return alert('El logo supera 600 KB.');
+  const r = new FileReader();
+  r.onload = async () => { S.lg[k] = r.result; S.lg.id = 'logos'; await DB.put('config', S.lg); render(); };
+  r.readAsDataURL(f);
+}
+
+/* ===== Formulario de convenio ===== */
+const LST = { adic: [['fecha', 'date', 'Fecha'], ['valor', 'number', 'Valor (COP)'], ['desc', 'text', 'Descripción']], pror: [['fecha', 'date', 'Fecha'], ['dias', 'number', 'Días'], ['desc', 'text', 'Descripción']] };
+const lista = t => S.c[t].map((x, i) => `<div class="row">${LST[t].map(([k, ty, pl]) => `<input type="${ty}" placeholder="${pl}" aria-label="${pl}" value="${E(x[k])}" oninput="S.c.${t}[${i}].${k}=this.value">`).join('')}<button class="x" onclick="S.c.${t}.splice(${i},1);ref('${t}')" aria-label="Quitar">Quitar</button></div>`).join('');
+const ref = t => $('#l_' + t).innerHTML = lista(t);
+const add = t => { S.c[t].push({}); ref(t); };
+const cerrar = () => $('#m').style.display = 'none';
+function cargaP() { const p = S.c.per[$('#f_mes').value] || {}; ['tecP', 'tecR', 'finP', 'finR', 'obs'].forEach(k => $('#p_' + k).value = p[k] ?? ''); }
+
+function abrir(id) {
+  const c = id ? JSON.parse(JSON.stringify(byId(id))) : { fuente: 'FCP' };
+  c.per = c.per || {}; c.adic = c.adic || []; c.pror = c.pror || [];
+  S.c = c; S.nuevo = !id;
+  const d = S.nuevo ? '' : 'disabled';
+  const f = (k, l, t = 'text', x = '', cl = '') => `<div class="${cl}"><label>${l}</label><input id="f_${k}" type="${t}" value="${E(c[k])}" ${x}></div>`;
+  const pn = (k, l) => `<div><label>${l}</label><input id="p_${k}" type="number" min="0" max="100" step="0.1"></div>`;
+  $('#m').innerHTML = `<div class="card ${c.fuente}" id="mc">
+  <h2>${S.nuevo ? 'Nuevo convenio: información básica' : 'Convenio ' + E(c.numero) + ': información básica'}</h2>
+  <div class="grid">
+    <div><label>Fuente de financiación</label><select id="f_fuente" ${d} onchange="$('#mc').className='card '+this.value"><option value="FCP" ${c.fuente == 'FCP' ? 'selected' : ''}>Fondo Colombia en Paz</option><option value="PGN" ${c.fuente == 'PGN' ? 'selected' : ''}>Presupuesto General de la Nación</option></select></div>
+    ${f('idArt', 'ID', 'text', d, 'fcp')}${f('numero', 'No. contrato', 'text', d)}${f('anio', 'Año', 'number', d, 'fcp')}${f('subcuenta', 'Subcuenta', 'text', d, 'fcp')}${f('contratista', 'Contratista', 'text', d)}
+    <div class="full"><label>Objeto</label><textarea id="f_objeto" rows="3" ${d}>${E(c.objeto)}</textarea></div>
+  </div>
+  <h2>Supervisor actual</h2>
+  <div class="grid">${f('sup', 'Nombre completo del supervisor')}${f('supCedula', 'Cédula de ciudadanía', 'text', '', 'fcp')}${f('supCorreo', 'Correo electrónico')}${f('supTel', 'Teléfono', 'text', '', 'fcp')}${f('supDir', 'Dirección de residencia', 'text', '', 'fcp')}${f('departamento', 'Departamento', 'text', '', 'fcp')}${f('ciudad', 'Ciudad', 'text', '', 'fcp')}</div>
+  <h2>Seguimiento del mes</h2>
+  <div class="grid"><div><label>Mes de reporte</label><input id="f_mes" type="month" value="${new Date().toISOString().slice(0, 7)}" onchange="cargaP()"></div>
+    ${pn('tecP', 'Avance ejecución técnica programado (%)')}${pn('tecR', 'Avance ejecución técnica real (%)')}${pn('finP', 'Avance financiero programado (%)')}${pn('finR', 'Avance financiero real (%)')}
+    <div class="full"><label>Observaciones</label><textarea id="p_obs" rows="3"></textarea></div>
+    ${S.nuevo ? '' : `<div class="full bar" style="margin:0"><div><label>Mover los datos del mes de reporte a otro mes</label><input id="f_mover" type="month"></div><button class="s" onclick="moverP()">Mover periodo</button><button class="x" onclick="elimP()">Eliminar este periodo</button></div>`}</div>
+  <h2>Adiciones presupuestales</h2><div id="l_adic">${lista('adic')}</div><button class="s" onclick="add('adic')">Agregar adición</button>
+  <h2>Prórrogas en tiempo</h2><div id="l_pror">${lista('pror')}</div><button class="s" onclick="add('pror')">Agregar prórroga</button>
+  <div class="bar" style="margin:22px 0 0"><button onclick="guardar()">Guardar</button><button class="s" onclick="guardar('x')">Guardar y exportar Excel</button><button class="s" onclick="guardar('p')">Guardar y exportar PDF</button><button class="x" onclick="cerrar()">Cancelar</button>
+  ${!S.nuevo && admin() ? '<button class="x" style="margin-left:auto" onclick="borrar()">Eliminar convenio</button>' : ''}</div></div>`;
+  $('#m').style.display = 'block'; cargaP();
+}
+async function guardar(ex) {
+  const c = S.c, v = k => ($('#f_' + k)?.value || '').trim();
+  if (S.nuevo) { ['fuente', 'numero', 'contratista', 'objeto', 'idArt', 'anio', 'subcuenta'].forEach(k => c[k] = v(k)); c.uid = S.u.id; }
+  ['sup', 'supCedula', 'supCorreo', 'supTel', 'supDir', 'departamento', 'ciudad'].forEach(k => c[k] = v(k));
+  if (!c.numero || !c.contratista || !c.sup) return alert('Complete número de contrato, contratista y supervisor.');
+  const m = $('#f_mes').value;
+  if (m) {
+    const p = {};
+    for (const k of ['tecP', 'tecR', 'finP', 'finR']) {
+      const x = $('#p_' + k).value;
+      if (x !== '' && (+x < 0 || +x > 100)) return alert('Los avances deben estar entre 0 y 100.');
+      p[k] = x === '' ? '' : +x;
+    }
+    p.obs = $('#p_obs').value.trim();
+    if (perVacio(p)) { delete c.per[m]; } else c.per[m] = p;
+  }
+  c.adic = c.adic.filter(x => x.valor || x.desc); c.pror = c.pror.filter(x => x.dias || x.desc);
+  try { await DB.put('convenios', c); } catch (e) { return alert('No se pudo guardar: ' + e.message); }
+  await cargar(); cerrar(); render();
+  if (ex == 'x') xlsx([c], '9999'); if (ex == 'p') pdf([c], '9999');
+}
+const perVacio = p => !p || (['tecP', 'tecR', 'finP', 'finR'].every(k => p[k] === '' || p[k] == null) && !p.obs);
+async function guardarPer(mes, antes) {
+  try { await DB.put('convenios', S.c); }
+  catch (e) { alert('No se pudo guardar: ' + e.message); abrir(S.c.id); return; }
+  await cargar(); render(); abrir(S.c.id); $('#f_mes').value = mes; cargaP();
+}
+async function moverP() {
+  const c = S.c, src = $('#f_mes').value, dst = $('#f_mover').value;
+  if (!src || !c.per[src]) return alert('El mes de reporte seleccionado no tiene datos guardados para mover.');
+  if (!dst) return alert('Elija el mes destino en "Mover los datos del mes de reporte a otro mes".');
+  if (dst == src) return alert('El mes destino es el mismo mes de reporte.');
+  if (c.per[dst] && !perVacio(c.per[dst]) && !confirm('El mes ' + lblMes(dst) + ' ya tiene datos. ¿Reemplazarlos con los de ' + lblMes(src) + '?')) return;
+  c.per[dst] = c.per[src]; delete c.per[src];
+  await guardarPer(dst);
+}
+async function elimP() {
+  const c = S.c, src = $('#f_mes').value;
+  if (!src || !c.per[src]) return alert('Ese mes no tiene datos guardados.');
+  if (!confirm('¿Eliminar los datos de ' + lblMes(src) + ' de este convenio? No se puede deshacer.')) return;
+  delete c.per[src];
+  await guardarPer(Object.keys(c.per).sort().pop() || new Date().toISOString().slice(0, 7));
+}
+async function borrar() { if (confirm('¿Eliminar este convenio y todo su historial?')) { await DB.del('convenios', S.c.id); await cargar(); cerrar(); render(); } }
+
+/* ===== Matriz consolidada (fuente única para pantalla, Excel y PDF) ===== */
+const MCOL = [['Téc. prog.', 'tecP'], ['Téc. real', 'tecR'], ['Fin. prog.', 'finP'], ['Fin. real', 'finR']];
+const FIJ = [
+  ['Fuente', c => c.fuente, 8], ['ID', c => c.idArt || '', 9], ['No. contrato', c => c.numero, 16], ['Año', c => c.anio || '', 7],
+  ['Contratista', c => c.contratista, 34], ['Objeto', c => c.objeto || '', 50], ['Subcuenta', c => c.subcuenta || '', 14],
+  ['Supervisor', c => c.sup, 30], ['Cédula', c => c.supCedula || '', 14], ['Correo', c => c.supCorreo || '', 28],
+  ['Teléfono', c => c.supTel || '', 14], ['Dirección', c => c.supDir || '', 28], ['Departamento', c => c.departamento || '', 16], ['Ciudad', c => c.ciudad || '', 16]
+];
+const hayNum = q => !!q && ['tecP', 'tecR', 'finP', 'finR'].some(k => q[k] !== '' && q[k] != null);
+const hayAlgo = q => hayNum(q) || !!(q && q.obs);
+const ordenar = l => [...l].sort((a, b) => String(a.fuente).localeCompare(String(b.fuente)) || String(a.numero).localeCompare(String(b.numero), 'es', { numeric: true }));
+const mesesDe = (l, ym) => [...new Set(l.flatMap(c => Object.keys(c.per || {}).filter(k => k <= ym && hayNum(c.per[k]))))].sort();
+const lblMes = k => MES[+k.slice(5) - 1] + ' ' + k.slice(0, 4);
+const etMes = (k, ms) => MES[+k.slice(5) - 1] + (new Set(ms.map(x => x.slice(0, 4))).size > 1 ? ' ' + k.slice(0, 4) : '');
+const rangoMeses = ms => !ms.length ? 'ninguno' : ms.length == 1 ? lblMes(ms[0]) : lblMes(ms[0]) + ' a ' + lblMes(ms[ms.length - 1]);
+const fuenteTxt = f => f == 'FCP' ? 'Fondo Colombia en Paz' : f == 'PGN' ? 'Presupuesto General de la Nación' : 'Todas';
+const nm = v => v === '' || v == null || isNaN(v) ? null : +v / 100;
+const fec = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : (s || ''); };
+const prom = a => { const v = a.filter(x => x !== '' && x != null && !isNaN(x)).map(Number); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : ''; };
+function armar(list, ym) {
+  const l = ordenar(list), ms = mesesDe(l, ym);
+  const rows = l.map(c => ({ c, fij: FIJ.map(f => f[1](c)), mes: ms.map(k => c.per?.[k] || {}), ad: sum(c.adic, 'valor'), pr: sum(c.pror, 'dias'), obs: ult(c, ym).obs || '' }));
+  return { l, ms, rows };
+}
+function descargar(blob, nombre) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombre.replace(/[\\/:*?"<>|]/g, '_');
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ===== Exportar Excel (ExcelJS) ===== */
+const BD = { style: 'thin', color: { argb: 'FFBFBFBF' } }, BOR = { top: BD, left: BD, bottom: BD, right: BD };
+const FN = { name: 'Calibri', size: 10 };
+const relleno = a => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: a } });
+function hdr(ws, r, c, v, fill = 'FF000000') {
+  const x = ws.getCell(r, c); x.value = v === '' ? null : v; x.font = { ...FN, bold: true, color: { argb: 'FFFFFFFF' } };
+  x.fill = relleno(fill); x.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; x.border = BOR; return x;
+}
+function dato(ws, r, c, v, o = {}) {
+  const x = ws.getCell(r, c); x.value = v === '' || v === undefined ? null : v; x.font = FN; x.border = BOR;
+  x.alignment = { vertical: 'middle', horizontal: o.al || 'left', wrapText: !!o.wrap };
+  if (o.nf) x.numFmt = o.nf; if (o.alt) x.fill = relleno('FFF5F5F5'); return x;
+}
+function total(ws, r, n, lc, lbl, ex) {
+  for (let c = 1; c <= n; c++) {
+    const x = ws.getCell(r, c); x.fill = relleno('FFE6E6E6'); x.font = { ...FN, bold: true };
+    x.border = { top: { style: 'medium', color: { argb: 'FF000000' } }, bottom: BD, left: BD, right: BD }; x.alignment = { vertical: 'middle', horizontal: 'center' };
+  }
+  const a = ws.getCell(r, lc); a.value = lbl; a.alignment = { vertical: 'middle', horizontal: 'left' };
+  Object.entries(ex).forEach(([c, e]) => { const x = ws.getCell(r, +c); x.value = e.f ? { formula: e.f, result: e.v } : e.v; if (e.nf) x.numFmt = e.nf; });
+}
+function base(wb, nom, anchos, info, logos) {
+  const ws = wb.addWorksheet(nom, {
+    properties: { tabColor: { argb: 'FF000000' } },
+    pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: .4, right: .4, top: .6, bottom: .6, header: .3, footer: .3 } }
+  });
+  anchos.forEach((w, i) => ws.getColumn(i + 1).width = w);
+  const r0 = logos.length ? 2 : 0;
+  if (r0) {
+    ws.getRow(1).height = 22; ws.getRow(2).height = 22;
+    const pxc = anchos[anchos.length - 1] * 7 + 5;
+    logos.forEach(l => ws.addImage(l.id, { tl: { col: l.der ? anchos.length - 1 + Math.max(0, (pxc - l.w) / pxc) : .05, row: .1 }, ext: { width: l.w, height: l.h } }));
+  }
+  const t = ws.getCell(r0 + 1, 1); t.value = 'FORMATO 104 · SEGUIMIENTO DE CONVENIOS'; t.font = { name: 'Calibri', bold: true, size: 15 }; ws.getRow(r0 + 1).height = 24;
+  const s = ws.getCell(r0 + 2, 1); s.value = 'Agencia de Renovación del Territorio'; s.font = { ...FN, color: { argb: 'FF666666' } };
+  const i = ws.getCell(r0 + 3, 1); i.value = info; i.font = { ...FN, color: { argb: 'FF666666' } };
+  for (let c = 1; c <= anchos.length; c++) ws.getCell(r0 + 3, c).border = { bottom: { style: 'medium', color: { argb: 'FF000000' } } };
+  ws.getRow(r0 + 4).height = 8;
+  ws.headerFooter = { oddFooter: '&L&8Formato 104 · Agencia de Renovación del Territorio&C&8Página &P de &N&R&8&D' };
+  return { ws, hr: r0 + 5 };
+}
+function tabla(ws, hr, heads, rows, cols, anchos, fx = 0) {
+  heads.forEach((h, i) => hdr(ws, hr, i + 1, h)); ws.getRow(hr).height = 34;
+  rows.forEach((row, ri) => {
+    const r = hr + 1 + ri; let lines = 1;
+    row.forEach((v, i) => { const k = cols[i] || {}; dato(ws, r, i + 1, v, { ...k, alt: ri % 2 }); if (k.wrap && v) lines = Math.max(lines, Math.ceil(String(v).length / (anchos[i] * 1.05))); });
+    if (lines > 1) ws.getRow(r).height = Math.min(lines, 14) * 13.5;
+  });
+  ws.autoFilter = { from: { row: hr, column: 1 }, to: { row: hr + Math.max(rows.length, 1), column: heads.length } };
+  ws.views = [{ state: 'frozen', xSplit: fx, ySplit: hr, showGridLines: false }];
+  ws.pageSetup.printTitlesRow = hr + ':' + hr;
+  return hr + rows.length;
+}
+async function logosX(wb) {
+  const out = [];
+  for (const k of ['a', 'b']) if (S.lg[k]) {
+    const s = await dim(S.lg[k]), w = Math.min(150, Math.round(46 * s.w / s.h));
+    out.push({ id: wb.addImage({ base64: S.lg[k], extension: /image\/png/.test(S.lg[k]) ? 'png' : 'jpeg' }), w, h: Math.round(w * s.h / s.w), der: k == 'b' });
+  }
+  return out;
+}
+async function xlsx(list, ym, filtro = '', mat = false) {
+  if (!window.ExcelJS) return alert('No se pudo cargar la librería de Excel. Revise su conexión a internet y recargue la página.');
+  try {
+    const wb = new ExcelJS.Workbook(); wb.creator = 'Formato 104 · ART'; wb.created = new Date();
+    const logos = await logosX(wb), l = ordenar(list), ms = mesesDe(l, ym);
+    const mkInfo = m => 'Corte: ' + (ym == '9999' ? (mat ? 'todos los periodos registrados' : 'último reporte registrado') : lblMes(ym)) + '  ·  Periodos diligenciados: ' + rangoMeses(m) + (filtro ? '  ·  Fuente: ' + fuenteTxt(filtro) : '');
+    const info = mkInfo(ms);
+
+    /* Hojas con el formato institucional: solo los meses diligenciados */
+    const hoja = (nom, ls, pre, post, fx) => {
+      const m = mesesDe(ls, ym);
+      const heads = [...pre.map(p => p[0]), ...m.flatMap(k => ['EJECUCIÓN TÉCNICA ' + etMes(k, m).toUpperCase(), 'EJECUCIÓN FINANCIERA ' + etMes(k, m).toUpperCase()]), ...post.map(p => p[0])];
+      const anchos = [...pre.map(p => p[2]), ...m.flatMap(() => [19, 19]), ...post.map(p => p[2])];
+      const cols = [...pre.map(p => ({ wrap: !!p[3] })), ...m.flatMap(() => [{ nf: '0.0%', al: 'center' }, { nf: '0.0%', al: 'center' }]), ...post.map(p => ({ wrap: !!p[3] }))];
+      const rows = ls.map(c => [...pre.map(p => p[1](c)), ...m.flatMap(k => { const q = c.per?.[k] || {}; return [nm(q.tecR), nm(q.finR)]; }), ...post.map(p => p[1](c))]);
+      const { ws, hr } = base(wb, nom, anchos, mkInfo(m) + '  ·  ' + (nom == '104' ? 'Fondo Colombia en Paz' : 'Presupuesto General de la Nación'), logos);
+      tabla(ws, hr, heads, rows, cols, anchos, fx);
+    };
+    const fc = l.filter(c => c.fuente == 'FCP'), pg = l.filter(c => c.fuente == 'PGN');
+    if (fc.length) hoja('104', fc,
+      [['ID', c => c.idArt || '', 9], ['CONTRATISTA', c => c.contratista, 34, 1], ['No. CONTRATO', c => c.numero, 16], ['AÑO', c => c.anio || '', 8], ['OBJETO', c => c.objeto || '', 50, 1], ['SUBCUENTA', c => c.subcuenta || '', 16]],
+      [['NOMBRE COMPLETO DEL SUPERVISOR', c => c.sup, 32], ['CÉDULA DE CIUDADANÍA', c => c.supCedula || '', 17], ['CORREO ELECTRÓNICO', c => c.supCorreo || '', 30], ['TELÉFONO', c => c.supTel || '', 15], ['DIRECCIÓN DE RESIDENCIA', c => c.supDir || '', 30, 1], ['DEPARTAMENTO', c => c.departamento || '', 16], ['CIUDAD', c => c.ciudad || '', 16], ['Observaciones', c => ult(c, ym).obs || '', 46, 1]], 3);
+    if (pg.length) hoja('PGN', pg,
+      [['CONTRATISTA', c => c.contratista, 34, 1], ['No. CONTRATO', c => c.numero, 16], ['OBJETO', c => c.objeto || '', 50, 1]],
+      [['NOMBRE COMPLETO DEL SUPERVISOR', c => c.sup, 32], ['Observaciones', c => ult(c, ym).obs || '', 46, 1]], 2);
+
+    /* Matriz consolidada: toda la información, mes a mes */
+    {
+      const { rows } = armar(l, ym), nf = FIJ.length, b = nf + ms.length * 4;
+      const anchos = [...FIJ.map(f => f[2]), ...ms.flatMap(() => [10.5, 10.5, 10.5, 10.5]), 18, 12, 46], nt = anchos.length;
+      const { ws, hr } = base(wb, 'Matriz', anchos, info, logos);
+      FIJ.forEach((f, i) => { hdr(ws, hr, i + 1, ''); hdr(ws, hr + 1, i + 1, f[0]); });
+      ms.forEach((k, j) => { const c0 = nf + 1 + j * 4; for (let i = 0; i < 4; i++) { hdr(ws, hr, c0 + i, i ? '' : lblMes(k).toUpperCase()); hdr(ws, hr + 1, c0 + i, MCOL[i][0], 'FF3A3A3A'); } ws.mergeCells(hr, c0, hr, c0 + 3); });
+      ['Adiciones (COP)', 'Prórrogas (días)', 'Observaciones (último periodo)'].forEach((t, i) => { hdr(ws, hr, b + 1 + i, ''); hdr(ws, hr + 1, b + 1 + i, t); });
+      ws.getRow(hr + 1).height = 30;
+      const cv = Array.from({ length: ms.length * 4 }, () => []);
+      rows.forEach((r, ri) => {
+        const x = hr + 2 + ri, alt = ri % 2; let lines = 1;
+        r.fij.forEach((v, i) => { const w = i == 4 || i == 5 || i == 11; dato(ws, x, i + 1, v, { al: [0, 1, 3].includes(i) ? 'center' : 'left', wrap: w, alt }); if (w && v) lines = Math.max(lines, Math.ceil(String(v).length / (anchos[i] * 1.05))); });
+        r.mes.forEach((q, j) => MCOL.forEach((m, i) => { const v = nm(q[m[1]]); dato(ws, x, nf + 1 + j * 4 + i, v, { nf: '0.0%', al: 'center', alt }); if (v != null) cv[j * 4 + i].push(v); }));
+        dato(ws, x, b + 1, r.ad || null, { nf: '"$"#,##0', al: 'right', alt });
+        dato(ws, x, b + 2, r.pr || null, { nf: '0', al: 'center', alt });
+        dato(ws, x, b + 3, r.obs, { wrap: true, alt }); if (r.obs) lines = Math.max(lines, Math.ceil(r.obs.length / (anchos[b + 2] * 1.05)));
+        if (lines > 1) ws.getRow(x).height = Math.min(lines, 14) * 13.5;
+      });
+      if (rows.length) {
+        const f = hr + 2, e = hr + 1 + rows.length, ex = {};
+        cv.forEach((a, i) => { const L = ws.getColumn(nf + 1 + i).letter; ex[nf + 1 + i] = { f: `IFERROR(AVERAGE(${L}${f}:${L}${e}),"")`, v: prom(a), nf: '0.0%' }; });
+        const La = ws.getColumn(b + 1).letter, Lp = ws.getColumn(b + 2).letter;
+        ex[b + 1] = { f: `SUM(${La}${f}:${La}${e})`, v: rows.reduce((s, r) => s + r.ad, 0), nf: '"$"#,##0' };
+        ex[b + 2] = { f: `SUM(${Lp}${f}:${Lp}${e})`, v: rows.reduce((s, r) => s + r.pr, 0), nf: '0' };
+        total(ws, e + 1, nt, 5, 'TOTAL / PROMEDIO', ex);
+      }
+      ws.autoFilter = { from: { row: hr + 1, column: 1 }, to: { row: hr + 1 + Math.max(rows.length, 1), column: nt } };
+      ws.views = [{ state: 'frozen', xSplit: 3, ySplit: hr + 1, showGridLines: false }];
+      ws.pageSetup.printTitlesRow = hr + ':' + (hr + 1);
+    }
+
+    /* Seguimiento mensual: una fila por convenio y periodo (incluye observaciones de cada mes) */
+    const seg = l.flatMap(c => Object.keys(c.per || {}).filter(k => k <= ym && hayAlgo(c.per[k])).sort().map(k => { const q = c.per[k]; return [c.fuente, c.numero, c.contratista, new Date(Date.UTC(+k.slice(0, 4), +k.slice(5) - 1, 1)), nm(q.tecP), nm(q.tecR), nm(q.finP), nm(q.finR), q.obs || '']; }));
+    if (seg.length) {
+      const an = [8, 16, 34, 16, 11, 11, 11, 11, 60], { ws, hr } = base(wb, 'Seguimiento mensual', an, info, logos);
+      tabla(ws, hr, ['Fuente', 'No. contrato', 'Contratista', 'Periodo', 'Téc. programada', 'Téc. real', 'Fin. programada', 'Fin. real', 'Observaciones'], seg,
+        [{ al: 'center' }, {}, { wrap: true }, { nf: 'mmmm yyyy', al: 'center' }, { nf: '0.0%', al: 'center' }, { nf: '0.0%', al: 'center' }, { nf: '0.0%', al: 'center' }, { nf: '0.0%', al: 'center' }, { wrap: true }], an, 3);
+    }
+
+    /* Adiciones presupuestales y prórrogas en tiempo */
+    const detalle = (nom, camp, tit, nf, tipoNum) => {
+      const rs = l.flatMap(c => (c[camp] || []).map(x => [c.fuente, c.numero, c.contratista, fec(x.fecha), x[tipoNum] === '' || x[tipoNum] == null ? null : +x[tipoNum], x.desc || '']));
+      if (!rs.length) return;
+      const an = [8, 16, 34, 14, 18, 60], { ws, hr } = base(wb, nom, an, info, logos);
+      const lr = tabla(ws, hr, ['Fuente', 'No. contrato', 'Contratista', 'Fecha', tit, 'Descripción'], rs, [{ al: 'center' }, {}, { wrap: true }, { nf: 'dd/mm/yyyy', al: 'center' }, { nf, al: tipoNum == 'valor' ? 'right' : 'center' }, { wrap: true }], an, 3);
+      const L = ws.getColumn(5).letter;
+      total(ws, lr + 1, 6, 3, 'TOTAL', { 5: { f: `SUM(${L}${hr + 1}:${L}${lr})`, v: rs.reduce((s, r) => s + (r[4] || 0), 0), nf } });
+    };
+    detalle('Adiciones', 'adic', 'Valor (COP)', '"$"#,##0', 'valor');
+    detalle('Prórrogas', 'pror', 'Días', '0', 'dias');
+
+    const buf = await wb.xlsx.writeBuffer();
+    descargar(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+      list.length == 1 && ym == '9999' && !mat ? 'Formato104_' + list[0].numero + '.xlsx' : 'Matriz_convenios_' + (ym == '9999' ? 'completa' : ym) + '.xlsx');
+  } catch (e) { console.error(e); alert('No se pudo generar el Excel: ' + e.message); }
+}
+
+/* ===== Exportar PDF ===== */
+async function pdf(list, ym, filtro = '', mat = false) {
+  if (!window.jspdf) return alert('No se pudo cargar la librería de PDF. Revise su conexión a internet y recargue la página.');
+  try {
+    const { jsPDF } = window.jspdf, one = list.length == 1 && ym == '9999' && !mat;
+    const { l, ms, rows } = armar(list, ym);
+    const lg = [];
+    for (const k of ['a', 'b']) if (S.lg[k]) { const s = await dim(S.lg[k]), w = Math.min(110, 34 * s.w / s.h); lg.push({ k, src: S.lg[k], w, h: w * s.h / s.w }); }
+    const d = new jsPDF({ orientation: one ? 'p' : 'l', unit: 'pt', format: 'a4' }), W = d.internal.pageSize.getWidth(), H = d.internal.pageSize.getHeight();
+    const ML = 36, TOP = 92, hechas = new Set();
+    const corte = ym == '9999' ? (mat ? 'todos los periodos registrados' : 'último reporte registrado') : lblMes(ym);
+    const sub = one ? 'Agencia de Renovación del Territorio · Convenio ' + l[0].numero
+      : 'Agencia de Renovación del Territorio · Corte: ' + corte + ' · Periodos diligenciados: ' + rangoMeses(ms) + (filtro ? ' · Fuente: ' + fuenteTxt(filtro) : '');
+    const cab = () => {
+      const pg = d.getNumberOfPages(); if (hechas.has(pg)) return; hechas.add(pg);
+      lg.forEach(x => d.addImage(x.src, x.k == 'a' ? ML : W - ML - x.w, 22, x.w, x.h));
+      d.setFont('helvetica', 'bold').setFontSize(one ? 12 : 14).setTextColor(0).text('FORMATO 104 · SEGUIMIENTO DE CONVENIOS', W / 2, 40, { align: 'center' });
+      d.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(100).text(sub, W / 2, 55, { align: 'center' });
+      d.setDrawColor(0).setLineWidth(1).line(ML, 70, W - ML, 70);
+    };
+    const st = {
+      margin: { top: TOP, left: ML, right: ML, bottom: 36 }, didDrawPage: cab,
+      styles: { font: 'helvetica', fontSize: one ? 8.5 : 7, cellPadding: one ? 4 : 3, lineColor: [200, 200, 200], lineWidth: .4, textColor: 20, valign: 'middle' },
+      headStyles: { fillColor: [0, 0, 0], textColor: 255, halign: 'center', fontStyle: 'bold' }, alternateRowStyles: { fillColor: [245, 245, 245] }
+    };
+    const y = () => d.lastAutoTable.finalY + 18;
+    const tit = (t, y0) => { if (y0 > H - 110) { d.addPage(); cab(); y0 = TOP; } d.setFont('helvetica', 'bold').setFontSize(9.5).setTextColor(0).text(t, ML, y0 + 2); return y0 + 9; };
+    cab();
+
+    if (one) {
+      const c = l[0], ks = Object.keys(c.per || {}).sort();
+      const b = [['Fuente de financiación', fuenteTxt(c.fuente)], ['ID', c.idArt], ['No. contrato', c.numero], ['Año', c.anio], ['Contratista', c.contratista], ['Objeto', c.objeto], ['Subcuenta', c.subcuenta], ['Supervisor actual', c.sup], ['Cédula', c.supCedula], ['Correo', c.supCorreo], ['Teléfono', c.supTel], ['Dirección', c.supDir], ['Departamento / Ciudad', [c.departamento, c.ciudad].filter(Boolean).join(' / ')]].filter(r => r[1]);
+      d.autoTable({ ...st, startY: TOP, head: [[{ content: 'Información básica', colSpan: 2, styles: { halign: 'left' } }]], body: b, columnStyles: { 0: { fontStyle: 'bold', cellWidth: 130 } } });
+      d.autoTable({ ...st, startY: y(), head: [['Periodo', 'Téc. prog.', 'Téc. real', 'Fin. prog.', 'Fin. real', 'Observaciones']], body: ks.map(k => { const p = c.per[k]; return [lblMes(k), pc(p.tecP), pc(p.tecR), pc(p.finP), pc(p.finR), p.obs || '']; }), columnStyles: { 0: { cellWidth: 80 }, 1: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'center' }, 4: { halign: 'center' }, 5: { cellWidth: 190 } } });
+      if ((c.adic || []).length) d.autoTable({ ...st, startY: y(), head: [['Adición presupuestal: fecha', 'Valor', 'Descripción']], body: c.adic.map(x => [x.fecha || '', cop(x.valor), x.desc || '']) });
+      if ((c.pror || []).length) d.autoTable({ ...st, startY: y(), head: [['Prórroga en tiempo: fecha', 'Días', 'Descripción']], body: c.pror.map(x => [x.fecha || '', x.dias || '', x.desc || '']) });
+    } else {
+      const tAd = rows.reduce((s, r) => s + r.ad, 0), tPr = rows.reduce((s, r) => s + r.pr, 0), ps = l.map(c => ult(c, ym));
+      const pr = a => { const v = prom(a); return v === '' ? '-' : pc(v); };
+      d.autoTable({
+        ...st, startY: TOP, alternateRowStyles: {},
+        head: [['Convenios', 'Fondo Colombia en Paz', 'Presupuesto General de la Nación', 'Avance técnico promedio', 'Avance financiero promedio', 'Adiciones presupuestales', 'Prórrogas (días)']],
+        body: [[l.length, l.filter(c => c.fuente == 'FCP').length, l.filter(c => c.fuente == 'PGN').length, pr(ps.map(p => p.tecR)), pr(ps.map(p => p.finR)), cop(tAd), tPr]],
+        headStyles: { fillColor: [43, 43, 43], textColor: 255, halign: 'center', fontSize: 7 }, bodyStyles: { halign: 'center', fontSize: 11, fontStyle: 'bold', cellPadding: 7 }
+      });
+      const grupos = []; for (let i = 0; i < ms.length; i += 6) grupos.push(ms.slice(i, i + 6)); if (!grupos.length) grupos.push([]);
+      grupos.forEach(g => {
+        const y0 = tit('Avance real por periodo (%)' + (g.length ? ' · ' + rangoMeses(g) : ' · sin periodos diligenciados'), y());
+        const fx = ['#', 'Fuente', 'ID', 'No. contrato', 'Contratista', 'Supervisor'];
+        const head = g.length ? [[...fx.map(t => ({ content: t, rowSpan: 2 })), ...g.map(k => ({ content: lblMes(k), colSpan: 2 }))], g.flatMap(() => ['Téc.', 'Fin.'])] : [fx];
+        const cs = { 0: { cellWidth: 16, halign: 'center' }, 1: { cellWidth: 28, halign: 'center' }, 2: { cellWidth: 26, halign: 'center' }, 3: { cellWidth: 66 } };
+        g.forEach((k, j) => { cs[6 + j * 2] = { halign: 'center', cellWidth: 31 }; cs[7 + j * 2] = { halign: 'center', cellWidth: 31 }; });
+        d.autoTable({
+          ...st, startY: y0, head, columnStyles: cs,
+          body: rows.map((r, i) => [i + 1, r.c.fuente, r.c.idArt || '', r.c.numero, r.c.contratista, r.c.sup, ...g.flatMap(k => { const q = r.c.per?.[k] || {}; return [pc(q.tecR), pc(q.finR)]; })])
+        });
+      });
+      const y1 = tit('Adiciones, prórrogas y observaciones del último periodo', y());
+      d.autoTable({
+        ...st, startY: y1,
+        head: [['#', 'No. contrato', 'Contratista', 'Adiciones (COP)', 'Prórrogas (días)', 'Último periodo', 'Observaciones']],
+        body: rows.map((r, i) => { const p = ult(r.c, ym); return [i + 1, r.c.numero, r.c.contratista, r.ad ? cop(r.ad) : '-', r.pr || '-', p.k ? lblMes(p.k) : '-', r.obs]; }),
+        foot: [['', '', 'TOTAL', cop(tAd), tPr, '', '']], showFoot: 'lastPage', footStyles: { fillColor: [225, 225, 225], textColor: 0, fontStyle: 'bold' },
+        didParseCell: h => { if (h.section == 'foot') h.cell.styles.halign = ['center', 'left', 'left', 'right', 'center', 'left', 'left'][h.column.index]; },
+        columnStyles: { 0: { cellWidth: 16, halign: 'center' }, 1: { cellWidth: 70 }, 3: { halign: 'right', cellWidth: 80 }, 4: { halign: 'center', cellWidth: 56 }, 5: { cellWidth: 70 }, 6: { cellWidth: 230 } }
+      });
+      let y2 = y() - 6; if (y2 > H - 50) { d.addPage(); cab(); y2 = TOP; }
+      d.setFont('helvetica', 'normal').setFontSize(7).setTextColor(110).text('FCP: Fondo Colombia en Paz · PGN: Presupuesto General de la Nación · Téc.: ejecución técnica real · Fin.: ejecución financiera real.', ML, y2);
+    }
+    const n = d.getNumberOfPages(), hoy = new Date().toLocaleDateString('es-CO');
+    for (let i = 1; i <= n; i++) {
+      d.setPage(i); d.setDrawColor(200).setLineWidth(.5).line(ML, H - 28, W - ML, H - 28);
+      d.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(120);
+      d.text('Formato 104 · Agencia de Renovación del Territorio', ML, H - 16); d.text('Página ' + i + ' de ' + n, W / 2, H - 16, { align: 'center' }); d.text('Generado el ' + hoy, W - ML, H - 16, { align: 'right' });
+    }
+    d.save((one ? 'Formato104_' + l[0].numero : 'Matriz_convenios_' + (ym == '9999' ? 'completa' : ym)).replace(/[\\/:*?"<>|]/g, '_') + '.pdf');
+  } catch (e) { console.error(e); alert('No se pudo generar el PDF: ' + e.message); }
+}
+
+pLogin();
+</script>
+</body>
+</html>
